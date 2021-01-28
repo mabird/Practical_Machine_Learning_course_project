@@ -1,0 +1,124 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "M.Budzowska"
+date: "1/26/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include = FALSE, message=FALSE}
+library(tidyverse)
+library(caret)
+```
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, I used data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. My goal was to predict the manner in which they did the exercise (i.e. the "classe" variable in the training set). 
+
+Source: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Data exploration and cleaning
+
+```{r}
+testing_final <- read.csv("pml-testing.csv")
+training_full <- read.csv("pml-training.csv")
+
+# remove first column (with row numbers)
+testing_final <- testing_final[, -1]
+training_full <- training_full[, -1]
+dim(training_full)
+```
+
+The data consists of 19622 observations and 159 variables.
+
+**1.** First, I check the data for missing values (Nas)
+
+```{r}
+column_na <- apply(training_full, 2, function(x) {sum(is.na(x))})
+table(column_na)
+```
+
+The above table shows that 92 columns do not have any Nas, while the remaining 67 are majority Nas, therefore I remove them.
+
+```{r}
+training_full <- training_full[, column_na == 0]
+testing_final <- testing_final[, column_na == 0]
+```
+
+**2.** Further inspection of the data showed that missing data is also present in form of empty strings. 
+
+```{r}
+column_empty <- apply(training_full, 2, function(x) {sum(x == "")})
+table(column_empty)
+```
+
+The table above shows that columns have either no empty stings or are majority empty stings. Only the 59 columns with no empty stings are retained.
+
+```{r}
+training_full <- training_full[, column_empty == 0]
+testing_final <- testing_final[, column_empty == 0]
+```
+
+
+## Model building
+
+I will now use the 58 variables to predict the classe variable using a machine learning approach. For this, I separated the provided training set into two parts: 3/4 for training and 1/4 for testing the model.
+
+```{r}
+# split training_full into training and testing set
+set.seed(1245)
+inTrain = createDataPartition(training_full$classe, p = 3/4)[[1]]
+training = training_full[ inTrain,]
+testing = training_full[-inTrain,]
+```
+
+**1.** I will first use the linear discriminative analysis (lda) algorithm 
+```{r warning = FALSE}
+mod_fit_lda <- train(classe ~ . , method = "lda", data = training)
+pred_lda <- predict(mod_fit_lda, newdata = testing)
+confusionMatrix(pred_lda, testing$classe)
+```
+
+**The accuracy of the lda model is 0.854. The expected out of sample error is: 0.146.**
+
+
+**2.** Next, I use the Gradient Boosting Machine (gbm) method with 3-fold cross validation:
+
+```{r cache = TRUE}
+set.seed(1245)
+contr_rf <- trainControl(method = "cv", number = 3, verboseIter = FALSE)
+mod_fit_gbm <- train(classe ~ . , method = "gbm", data = training, verbose = FALSE,  trControl = contr_rf)
+pred_gbm <- predict(mod_fit_gbm, newdata = testing)
+confusionMatrix(pred_gbm, testing$classe)
+```
+
+**The accuracy of the gbm model is 0.995. The expected out of sample error is: 0.005.**
+
+
+**3.** Next, I use the Random Forest (rm) method with 3-fold cross validation:
+
+```{r cache = TRUE}
+set.seed(1245)
+mod_fit_rf <- train(classe ~ . , method = "rf", data = training, trControl = contr_rf)
+pred_rf <- predict(mod_fit_rf, newdata = testing)
+confusionMatrix(pred_rf, testing$classe)
+```
+
+**The accuracy of the Random Forest model is 0.999. The expected out of sample error is: 0.001.**
+
+## Prediction
+
+The model obtained with the Random Forest algorithm performed the best from the three tested models. Therefore I will use it to predict the classe of the testing data provied for this project.
+
+```{r}
+pred_test <- predict(mod_fit_rf, newdata = testing_final)
+```
+
+The predictions are as follows:
+```{r}
+pred_test
+```
+
